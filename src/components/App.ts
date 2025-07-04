@@ -5,6 +5,7 @@ class SvgPolygonApp extends HTMLElement {
   private zoom: number = 1;
   private offset = { x: 0, y: 0 };
   private dragging = false;
+  private hasLoadedSaved = false;
 
   constructor() {
     super();
@@ -105,10 +106,12 @@ class SvgPolygonApp extends HTMLElement {
     clearPolygons();
     this.shadowRoot!.getElementById("viewport")!.innerHTML = "";
     this.shadowRoot!.getElementById("buffer")!.innerHTML = "";
+    this.hasLoadedSaved = false;
   }
 
   loadSaved() {
     const data = loadPolygons();
+    if (data.buffer.length === 0 && data.workspace.length === 0) return;
 
     const buffer = this.shadowRoot!.getElementById("buffer")!;
     buffer.innerHTML = "";
@@ -127,10 +130,7 @@ class SvgPolygonApp extends HTMLElement {
         "polygon"
       );
       poly.setAttribute("points", points);
-      poly.setAttribute(
-        "fill",
-        "#" + Math.floor(Math.random() * 16777215).toString(16)
-      );
+      poly.setAttribute("fill", "#800000");
       svg.appendChild(poly);
     });
   }
@@ -197,20 +197,55 @@ class SvgPolygonApp extends HTMLElement {
 
   onDrop(e: DragEvent) {
     e.preventDefault();
+
     const points = e.dataTransfer?.getData("text/plain");
     if (!points) return;
 
     const svg = this.shadowRoot!.getElementById("viewport")!;
+    const mouse = this.getMousePosition(e);
+
     const poly = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "polygon"
     );
-    poly.setAttribute("points", points);
-    poly.setAttribute(
-      "fill",
-      "#" + Math.floor(Math.random() * 16777215).toString(16)
-    );
+    poly.setAttribute("points", this.translatePoints(points, mouse));
+    poly.setAttribute("fill", "#800000");
     svg.appendChild(poly);
+  }
+
+  private getMousePosition(evt: DragEvent): { x: number; y: number } {
+    const el = this.shadowRoot!.getElementById("svg-root");
+
+    if (!(el instanceof SVGSVGElement)) {
+      throw new Error("svg-root is not an SVGSVGElement");
+    }
+
+    const svg = el;
+    const pt = svg.createSVGPoint();
+
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+
+    const cursorpt = pt.matrixTransform(svg.getScreenCTM()!.inverse());
+
+    return {
+      x: (cursorpt.x - this.offset.x) / this.zoom,
+      y: (cursorpt.y - this.offset.y) / this.zoom,
+    };
+  }
+
+  private translatePoints(
+    points: string,
+    position: { x: number; y: number }
+  ): string {
+    const coords = points
+      .trim()
+      .split(" ")
+      .map((p) => {
+        const [x, y] = p.split(",").map(Number);
+        return `${x + position.x},${y + position.y}`;
+      });
+    return coords.join(" ");
   }
 }
 
